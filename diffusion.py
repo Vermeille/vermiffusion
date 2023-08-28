@@ -2,7 +2,7 @@ import torch
 
 
 def b(x, dim):
-    return x.view([-1] + [1] * (dim - x.dim()))
+    return x.view([-1] + [1] * (dim - max(1, x.dim())))
 
 
 class ForwardProcess(torch.nn.Module):
@@ -36,8 +36,12 @@ class ForwardProcess(torch.nn.Module):
         a_bar_t = b(self.alpha_bar[t], 4)
         return torch.sqrt(a_bar_t) * xt - torch.sqrt(1 - a_bar_t) * v
 
+    def to_noise(self, xt, v, t):
+        a_bar_t = b(self.alpha_bar[t], 4)
+        return torch.sqrt(1 - a_bar_t) * xt + torch.sqrt(a_bar_t) * v
 
-def get_cosine(T, off=0.008, pow=2):
+
+def get_cosine(T, off=0.008, pow=3):
     f = torch.cos(torch.linspace(off, 1 + off, T) / (1 + off) * torch.pi /
                   2)**pow
     f = f / f[0]

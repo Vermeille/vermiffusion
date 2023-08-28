@@ -11,7 +11,7 @@ class Scale(nn.Module):
 
     def __init__(self, scale):
         super().__init__()
-        self.scale = scale
+        self.scale = nn.Parameter(torch.tensor(scale))
 
     def forward(self, x):
         return x * self.scale
@@ -22,15 +22,19 @@ class ResBlock(tnn.CondSeq):
     def __init__(self, in_channels, out_channels):
         super().__init__(
             OrderedDict([
-                ('norm', nn.GroupNorm(32, in_channels, affine=False)),
+                ('norm', nn.GroupNorm(1, in_channels, affine=False)),
                 ('temb', tnn.FiLM2d(in_channels, 1024)),
-                ('act', nn.ReLU()),
-                ('conv', tnn.Conv3x3(in_channels, out_channels)),
-                ('norm2', nn.GroupNorm(32, out_channels, affine=False)),
+                ('act', nn.GELU()),
+                ('conv',
+                 tu.kaiming(tnn.Conv3x3(in_channels, out_channels,
+                                        bias=False))),
+                ('norm2', nn.GroupNorm(1, out_channels, affine=False)),
                 ('temb2', tnn.FiLM2d(out_channels, 1024)),
-                ('act2', nn.ReLU()),
-                ('conv2', tnn.Conv3x3(out_channels, out_channels)),
-                ('scale', Scale(0.1)),
+                ('act2', nn.GELU()),
+                ('conv2',
+                 tu.kaiming(tnn.Conv3x3(out_channels, out_channels,
+                                        bias=False))),
+                ('scale', Scale(0.0)),
             ]))
 
     def forward(self, x, y=None):
@@ -42,24 +46,36 @@ class UNet(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         base_ch = 32
-        self.temb = tu.normal_init(nn.Embedding(1000, 1024))
-        downs = [tnn.CondSeq(tnn.Conv1x1(in_channels, base_ch))]
+        self.temb = nn.Sequential(
+            tu.normal_init(nn.Embedding(1000, 1024), std=0.002),
+            nn.GroupNorm(1, 1024))
+        downs = [tnn.CondSeq(tnn.Conv1x1(in_channels, base_ch), nn.GELU())]
         ups = [
-            tnn.CondSeq(nn.GroupNorm(1, base_ch),
-                        tnn.Conv1x1(base_ch, out_channels))
+            tnn.CondSeq(
+                nn.GroupNorm(1, base_ch),
+                tu.normal_init(tnn.Conv1x1(base_ch, out_channels), 0.02))
         ]
 
-        base_ch = base_ch * 2
+        factor = 2
+        base_ch = int(base_ch * factor)
         for i in range(4):
-            ch = 2**i * base_ch
+            ch = int(factor**i * base_ch)
             print(ch)
             downs.append(
                 tnn.CondSeq(
                     OrderedDict([
-                        ('conv', tnn.Conv3x3(ch // 2, ch, stride=2,
-                                             bias=False)),
+                        ('norm',
+                         nn.GroupNorm(1, int(ch // factor), affine=False)),
+                        ('conv',
+                         tu.kaiming(
+                             nn.Conv2d(int(ch // factor),
+                                       ch,
+                                       2,
+                                       stride=2,
+                                       bias=False))),
                         ('res1', ResBlock(ch, ch)),
                         ('res2', ResBlock(ch, ch)),
+                        ('res3', ResBlock(ch, ch)),
                     ])))
 
             ups.append(
@@ -67,9 +83,12 @@ class UNet(nn.Module):
                     OrderedDict([
                         ('res1', ResBlock(ch, ch)),
                         ('res2', ResBlock(ch, ch)),
+                        ('res3', ResBlock(ch, ch)),
                         ('up', nn.Upsample(scale_factor=2)),
-                        ('conv', tnn.Conv3x3(ch, ch // 2, bias=False)),
-                        ('scale', Scale(0.1)),
+                        ('conv',
+                         tu.kaiming(
+                             tnn.Conv3x3(ch, int(ch // factor), bias=False))),
+                        ('scale', Scale(0.0)),
                     ])))
         self.downs = nn.ModuleList(downs)
         self.ups = nn.ModuleList(ups)
