@@ -17,6 +17,20 @@ class Scale(nn.Module):
         return x * self.scale
 
 
+class ResidualSA(nn.Module):
+
+    def __init__(self, ch):
+        super().__init__()
+        self.branch = nn.Sequential(
+            OrderedDict([('norm', nn.GroupNorm(1, ch, affine=True)),
+                         ('sa',
+                          tnn.SelfAttention2d(ch, ch // 64, checkpoint=False)),
+                         ('scale', Scale(0.01))]))
+
+    def forward(self, x):
+        return x + self.branch(x)
+
+
 class ResBlock(tnn.CondSeq):
 
     def __init__(self, in_channels, out_channels):
@@ -34,7 +48,7 @@ class ResBlock(tnn.CondSeq):
                 ('conv2',
                  tu.kaiming(tnn.Conv3x3(out_channels, out_channels,
                                         bias=False))),
-                ('scale', Scale(0.0)),
+                ('scale', Scale(0.01)),
             ]))
 
     def forward(self, x, y=None):
@@ -73,7 +87,9 @@ class UNet(nn.Module):
                                        2,
                                        stride=2,
                                        bias=False))),
+                        ('sa1', ResidualSA(ch) if i > 1 else nn.Identity()),
                         ('res1', ResBlock(ch, ch)),
+                        ('sa2', ResidualSA(ch) if i > 1 else nn.Identity()),
                         ('res2', ResBlock(ch, ch)),
                         ('res3', ResBlock(ch, ch)),
                     ])))
@@ -81,7 +97,9 @@ class UNet(nn.Module):
             ups.append(
                 tnn.CondSeq(
                     OrderedDict([
+                        ('sa1', ResidualSA(ch) if i > 1 else nn.Identity()),
                         ('res1', ResBlock(ch, ch)),
+                        ('sa2', ResidualSA(ch) if i > 1 else nn.Identity()),
                         ('res2', ResBlock(ch, ch)),
                         ('res3', ResBlock(ch, ch)),
                         ('up', nn.Upsample(scale_factor=2)),

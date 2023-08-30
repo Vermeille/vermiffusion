@@ -28,7 +28,6 @@ class DDIM:
             n_steps).int().to(device)
         xt = torch.randn(*shape, device=device, generator=generator)
         for cur, nxt in zip(steps[:-1], steps[1:]):
-            print(xt.device, cur.device, nxt.device, cur, nxt)
             v = model(xt, cur[None])
             xt = self.step(xt, v, cur, nxt, eta=eta)
         return xt
