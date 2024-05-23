@@ -12,6 +12,7 @@ class ForwardProcess(torch.nn.Module):
         self.register_buffer('beta', beta)
         self.register_buffer('alpha', 1 - beta)
         self.register_buffer('alpha_bar', torch.cumprod(self.alpha, dim=0))
+        self.T = len(self.beta)
 
     def forward_to(self, x0, e, t):
         a_bar_t = b(self.alpha_bar[t], 4)
@@ -41,7 +42,7 @@ class ForwardProcess(torch.nn.Module):
         return torch.sqrt(1 - a_bar_t) * xt + torch.sqrt(a_bar_t) * v
 
 
-def get_cosine(T, off=0.008, pow=3):
+def get_cosine(T, off=0.00, pow=2):
     f = torch.cos(torch.linspace(off, 1 + off, T) / (1 + off) * torch.pi /
                   2)**pow
     f = f / f[0]
@@ -49,6 +50,13 @@ def get_cosine(T, off=0.008, pow=3):
     beta = torch.cat([torch.tensor([0]), beta], 0)
     return ForwardProcess(beta)
 
+
+def get_linear(T):
+    f = torch.linspace(1, 0, T)
+    f = f / f[0]
+    beta = 1 - f[1:] / f[:-1]
+    beta = torch.cat([torch.tensor([0]), beta], 0)
+    return ForwardProcess(beta)
 
 if __name__ == '__main__':
     cos = get_cosine(100)

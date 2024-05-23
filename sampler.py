@@ -7,14 +7,14 @@ class DDIM:
     def __init__(self, forward_process: ForwardProcess):
         self.forward_process = forward_process
 
-    def step(self, xt, v, current_t, next_t, eta=0):
+    def step(self, xt, pred, current_t, next_t, eta=0):
         a_t = b(self.forward_process.alpha_bar[current_t], 4)
         a_tm1 = b(self.forward_process.alpha_bar[next_t], 4)
         sigma_t = (eta * torch.sqrt(
             (1 - a_tm1) / (1 - a_t)) * torch.sqrt(1 - a_t / a_tm1))
 
-        x0 = self.forward_process.to_x0(xt, v, current_t)
-        pred_e = self.forward_process.to_noise(xt, v, current_t)
+        x0 = self.forward_process.to_x0(xt, pred, current_t)
+        pred_e = self.forward_process.to_noise(xt, pred, current_t)
 
         return (a_tm1.sqrt() * x0 +
                 torch.sqrt(1 - a_tm1 - sigma_t**2) * pred_e +
@@ -28,6 +28,6 @@ class DDIM:
             n_steps).int().to(device)
         xt = torch.randn(*shape, device=device, generator=generator)
         for cur, nxt in zip(steps[:-1], steps[1:]):
-            v = model(xt, cur[None])
-            xt = self.step(xt, v, cur, nxt, eta=eta)
+            pred = model(xt, cur[None])
+            xt = self.step(xt, pred, cur, nxt, eta=eta)
         return xt
