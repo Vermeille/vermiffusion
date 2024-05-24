@@ -7,15 +7,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as TF
 
-from sampler import DDIM
-from diffusion import get_cosine, get_linear
+from sampler import DDIM, FlowSampler
+from diffusion import get_cosine, get_linear, FlowMatching
 from model import UNet
 import schedulefree
 
 
 def main(tag, rank, world_size):
     basem = UNet(3, 3).to(rank)
-    basem = torch.compile(basem)
+    #basem = torch.compile(basem)
+    #basem.load_state_dict(torch.load('model/ckpt_2600.pth', map_location='cpu')['model'])
     if rank == 0:
         print(basem)
     if world_size > 1:
@@ -25,9 +26,17 @@ def main(tag, rank, world_size):
     else:
         m = basem
 
-    diff = get_cosine(1000).to(rank)
+    alg = 'flow'
+    if alg == 'diffusion':
+        diff = get_cosine(1000).to(rank)
+        sampler = DDIM(diff)
+    elif alg == 'flow':
+        diff = FlowMatching(1000)
+        sampler = FlowSampler(diff)
+    else:
+        assert False
 
-    dat = tch.datasets.UnlabeledImages('~/pinterest-downloader/faces/',
+    dat = tch.datasets.UnlabeledImages('~/faces/',
                                        transform=TF.Compose([
                                            TF.Resize(96),
                                            TF.CenterCrop(96),
@@ -39,7 +48,7 @@ def main(tag, rank, world_size):
     #dat = [dat[i % 32] for i in range(512-128)]
     #dat = [dat[0] for i in range(512-128)]
     data_loader = torch.utils.data.DataLoader(dat,
-                                              batch_size=512 - 128,
+                                              batch_size=64,#512 - 128,
                                               shuffle=True,
                                               num_workers=4,
                                               pin_memory=True,
@@ -65,8 +74,7 @@ def main(tag, rank, world_size):
         opt.eval()
         g = torch.Generator(device=rank)
         g.manual_seed(327023487 + rank)
-        ddim = DDIM(diff)
-        xt = ddim.sample(basem, (16, 3, 96, 96), 210, eta=0,
+        xt = sampler.sample(basem, (16, 3, 96, 96), 210, eta=0,
                          generator=g).float()
         opt.train()
         return {'gen': xt.clamp(-1, 1)}
