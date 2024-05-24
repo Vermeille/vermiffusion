@@ -82,7 +82,7 @@ def main(tag, rank, world_size):
     LR = 5e-4
     EPOCHS = 20
     #opt = torch.optim.AdamW(m.parameters(), lr=LR, betas=(0.9, 0.99), weight_decay=0.001)
-    opt = schedulefree.AdamWScheduleFree(m.parameters(), LR, warmup_steps=500, weight_decay=0.001, betas=(0.95, 0.99))
+    opt = schedulefree.AdamWScheduleFree(m.parameters(), LR, warmup_steps=0, weight_decay=0.001, betas=(0.95, 0.99))
 
     recipe = tch.recipes.TrainAndCall(
         m,

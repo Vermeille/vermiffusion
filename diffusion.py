@@ -49,25 +49,31 @@ class FlowMatching:
     def forward_to(self, x0, e, t):
         t = b(t / self.T, 4)  # to fractional T
         mu = (1 - t) * x0
-        sigma = 0.001 + t**2 * (1 - 0.001)
+        sigma = t
         return mu + sigma * e
 
     def make_targets(self, x0, t):
         e = torch.randn_like(x0)
         return {
             'xt': self.forward_to(x0, e, t),
-            'v': x0,
+            'v': self.to_target(x0, e, t),
             'e': e
         }
 
+    def to_target(self, x0, e, t):
+        d = b(t / self.T, 4)  # to fractional T
+        mu = (1 - d) * x0
+        sigma = d
+        return (x0 - mu + sigma * e) * self.T / b(t, 4)
+
     def to_x0(self, xt, pred, t):
-        return pred
+        t = b(t, 4)  # to fractional T
+        return xt + pred * t / self.T
+
 
     def to_noise(self, xt, pred, t):
-        t = b(t / self.T, 4)  # to fractional T
-        mu = (1 - t) * pred
-        sigma = 0.001 + t**2 * (1 - 0.001)
-        return (xt - mu) / sigma
+        t = b(t, 4)
+        return xt - pred * (self.T - t) / self.T
 
 def get_cosine(T, off=0.00, pow=2):
     f = torch.cos(torch.linspace(off, 1 + off, T) / (1 + off) * torch.pi /
