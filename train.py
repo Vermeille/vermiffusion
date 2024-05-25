@@ -57,12 +57,12 @@ def main(tag, rank, world_size):
     def train(x):
         x = x[0]
         x0 = x.to(rank)
-        t = torch.randint(0, diff.T, (x.size(0), ), device=rank)
+        t = torch.randint(0, diff.T, (x.size(0), 2), device=rank).max(dim=1).values
         t = t.sort().values
         tgt = diff.make_targets(x0, t)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             pred = m(tgt['xt'], t).float()
-        loss = F.mse_loss(diff.to_x0(tgt['xt'], pred, t), x0)
+        loss = F.l1_loss(diff.to_x0(tgt['xt'], pred, t), x0)
         #loss = F.mse_loss(pred, tgt['v'])
         loss.backward()
         return {
@@ -80,7 +80,7 @@ def main(tag, rank, world_size):
         opt.train()
         return {'gen': xt.clamp(-1, 1)}
 
-    LR = 1e-3
+    LR = 2e-3
     EPOCHS = 20
     #opt = torch.optim.AdamW(m.parameters(), lr=LR, betas=(0.9, 0.99), weight_decay=0.001)
     opt = schedulefree.AdamWScheduleFree(m.parameters(), LR, warmup_steps=50, weight_decay=0.001, betas=(0.95, 0.99))
