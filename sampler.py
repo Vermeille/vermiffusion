@@ -37,12 +37,11 @@ class FlowSampler:
     def __init__(self, forward_process: FlowMatching):
         self.forward_process = forward_process
 
-    def step(self, xt, pred, current_t, next_t, eta=0):
-        pred_noise = self.forward_process.to_noise(xt, pred, current_t)
+    def step(self, xt, pred, current_t, next_t, base_e, eta=0):
         pred_x0 = self.forward_process.to_x0(xt, pred, current_t)
-        pred_noise = (1 - eta) * pred_noise + eta * torch.randn_like(pred_noise)
-        next_xt = self.forward_process.forward_to(pred_x0, pred_noise, next_t)
-        return next_xt
+        pred_e = self.forward_process.to_noise(xt, pred, current_t)
+        next_xt = self.forward_process.forward_to(pred_x0, pred_e, next_t)
+        return next_xt, pred_x0
 
     @torch.no_grad()
     def sample(self, model, shape, n_steps, eta=0, generator=None):
@@ -51,7 +50,11 @@ class FlowSampler:
             self.forward_process.T - 1, 0,
             n_steps).int().to(device)
         xt = torch.randn(*shape, device=device, generator=generator)
+        base_e = xt
+        xts = []
         for cur, nxt in zip(steps[:-1], steps[1:]):
+            print(cur)
             pred = model(xt, cur[None])
-            xt = self.step(xt, pred, cur, nxt, eta=eta)
-        return xt
+            xt, x0 = self.step(xt, pred, cur, nxt, base_e, eta=eta)
+            xts.append(x0)
+        return xts[-1]#torch.cat(xts, dim=0)

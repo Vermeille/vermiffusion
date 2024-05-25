@@ -16,7 +16,7 @@ import schedulefree
 def main(tag, rank, world_size):
     basem = UNet(3, 3).to(rank)
     #basem = torch.compile(basem)
-    #basem.load_state_dict(torch.load('model/ckpt_2600.pth', map_location='cpu')['model'])
+    #basem.load_state_dict(torch.load('model/ckpt_3000.pth', map_location='cpu')['model'])
     if rank == 0:
         print(basem)
     if world_size > 1:
@@ -48,7 +48,7 @@ def main(tag, rank, world_size):
     #dat = [dat[i % 32] for i in range(512-128)]
     #dat = [dat[0] for i in range(512-128)]
     data_loader = torch.utils.data.DataLoader(dat,
-                                              batch_size=64,#512 - 128,
+                                              batch_size=512 - 128 - 32,
                                               shuffle=True,
                                               num_workers=4,
                                               pin_memory=True,
@@ -57,7 +57,8 @@ def main(tag, rank, world_size):
     def train(x):
         x = x[0]
         x0 = x.to(rank)
-        t = torch.randint(0, 1000, (x.size(0), ), device=rank)
+        t = torch.randint(0, diff.T, (x.size(0), ), device=rank)
+        t = t.sort().values
         tgt = diff.make_targets(x0, t)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             pred = m(tgt['xt'], t).float()
@@ -74,15 +75,15 @@ def main(tag, rank, world_size):
         opt.eval()
         g = torch.Generator(device=rank)
         g.manual_seed(327023487 + rank)
-        xt = sampler.sample(basem, (16, 3, 96, 96), 210, eta=0,
+        xt = sampler.sample(basem, (24, 3, 96, 96), 51, eta=0,
                          generator=g).float()
         opt.train()
         return {'gen': xt.clamp(-1, 1)}
 
-    LR = 5e-4
+    LR = 1e-3
     EPOCHS = 20
     #opt = torch.optim.AdamW(m.parameters(), lr=LR, betas=(0.9, 0.99), weight_decay=0.001)
-    opt = schedulefree.AdamWScheduleFree(m.parameters(), LR, warmup_steps=0, weight_decay=0.001, betas=(0.95, 0.99))
+    opt = schedulefree.AdamWScheduleFree(m.parameters(), LR, warmup_steps=50, weight_decay=0.001, betas=(0.95, 0.99))
 
     recipe = tch.recipes.TrainAndCall(
         m,
@@ -103,6 +104,7 @@ def main(tag, rank, world_size):
     recipe.test_loop.callbacks.add_callbacks([
         tcb.Log('gen', 'gen'),
     ])
+    #recipe.load_state_dict(torch.load('model/ckpt_27000.pth', map_location='cpu'))
     print(sum(p.numel() for p in basem.parameters()) / 1e6, 'M parameters')
     recipe.to(rank)
     recipe.run(EPOCHS)

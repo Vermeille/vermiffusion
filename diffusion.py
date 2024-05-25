@@ -43,37 +43,29 @@ class ForwardProcess(torch.nn.Module):
 
 
 class FlowMatching:
+    # t=0 => x0
+    # t=T => e
     def __init__(self, T):
         self.T = T
 
     def forward_to(self, x0, e, t):
-        t = b(t / self.T, 4)  # to fractional T
-        mu = (1 - t) * x0
-        sigma = t
-        return mu + sigma * e
+        t = b(t / (self.T - 1), 4)  # to fractional T
+        return t * e + (1 - t) * x0
 
     def make_targets(self, x0, t):
         e = torch.randn_like(x0)
         return {
             'xt': self.forward_to(x0, e, t),
-            'v': self.to_target(x0, e, t),
-            'e': e
         }
 
-    def to_target(self, x0, e, t):
-        d = b(t / self.T, 4)  # to fractional T
-        mu = (1 - d) * x0
-        sigma = d
-        return (x0 - mu + sigma * e) * self.T / b(t, 4)
-
     def to_x0(self, xt, pred, t):
-        t = b(t, 4)  # to fractional T
-        return xt + pred * t / self.T
-
+        t = b(t, 4)
+        return xt + pred
 
     def to_noise(self, xt, pred, t):
         t = b(t, 4)
-        return xt - pred * (self.T - t) / self.T
+        return xt - pred * ((self.T - 1 - t) * torch.where(t == 0, 0, 1.0 / t))
+
 
 def get_cosine(T, off=0.00, pow=2):
     f = torch.cos(torch.linspace(off, 1 + off, T) / (1 + off) * torch.pi /
