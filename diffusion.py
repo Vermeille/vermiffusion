@@ -59,12 +59,12 @@ class FlowMatching:
         }
 
     def to_x0(self, xt, pred, t):
-        t = b(t, 4)
-        return xt + pred
+        t = b(t / (self.T - 1), 4)  # to fractional T
+        return xt + pred * t
 
-    def to_noise(self, xt, pred, t):
-        t = b(t, 4)
-        return xt - pred * ((self.T - 1 - t) * torch.where(t == 0, 0, 1.0 / t))
+    def step(self, xt, v, current_t, next_t):
+        t = b((current_t - next_t) / (self.T - 1), 4)  # to fractional T
+        return xt + v * t
 
 
 def get_cosine(T, off=0.00, pow=2):

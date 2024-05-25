@@ -39,8 +39,7 @@ class FlowSampler:
 
     def step(self, xt, pred, current_t, next_t, base_e, eta=0):
         pred_x0 = self.forward_process.to_x0(xt, pred, current_t)
-        pred_e = self.forward_process.to_noise(xt, pred, current_t)
-        next_xt = self.forward_process.forward_to(pred_x0, pred_e, next_t)
+        next_xt = self.forward_process.step(xt, pred, current_t, next_t)
         return next_xt, pred_x0
 
     @torch.no_grad()
