@@ -1,5 +1,5 @@
 import torch
-from diffusion import ForwardProcess, b, FlowMatching
+from diffusion import ForwardProcess, b, FlowMatching, GradientDescent
 
 
 class DDIM:
@@ -57,3 +57,24 @@ class FlowSampler:
             xt, x0 = self.step(xt, pred, cur, nxt, base_e, eta=eta)
             xts.append(x0)
         return xts[-1]#torch.cat(xts, dim=0)
+
+
+class GradientSampler:
+    def __init__(self, forward_process: GradientDescent):
+        self.forward_process = forward_process
+
+    def step(self, xt, pred, current_t, next_t, base_e, eta=0):
+        next_xt = xt + 0.1 * pred
+        return next_xt, next_xt
+
+    @torch.no_grad()
+    def sample(self, model, shape, n_steps, eta=0, generator=None):
+        device = next(iter(model.parameters())).device
+        xt = torch.randn(*shape, device=device, generator=generator)
+        base_e = xt
+        xts = []
+        for _ in range(n_steps):
+            pred = model(xt, torch.tensor([0] * shape[0], device=device))
+            xt, x0 = self.step(xt, pred, None, None, base_e, eta=eta)
+            xts.append(x0)
+        return x0#torch.cat(xts, dim=0)

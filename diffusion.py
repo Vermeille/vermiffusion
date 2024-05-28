@@ -67,6 +67,25 @@ class FlowMatching:
         return xt + v * t
 
 
+class GradientDescent:
+    def __init__(self, T):
+        self.T = T
+
+    def make_targets(self, x0, t):
+        e = torch.randn_like(x0)
+        return {
+            'xt': self.forward_to(x0, e, t),
+        }
+
+    def forward_to(self, x0, e, t):
+        t = b(t / (self.T - 1), 4)  # to fractional T
+        return t * e + (1 - t) * x0
+
+    def to_x0(self, xt, pred, t):
+        return xt + pred
+
+
+
 def get_cosine(T, off=0.00, pow=2):
     f = torch.cos(torch.linspace(off, 1 + off, T) / (1 + off) * torch.pi /
                   2)**pow

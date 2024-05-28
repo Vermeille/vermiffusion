@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as TF
 
-from sampler import DDIM, FlowSampler
-from diffusion import get_cosine, get_linear, FlowMatching
+from sampler import DDIM, FlowSampler, GradientSampler
+from diffusion import get_cosine, get_linear, FlowMatching, GradientDescent
 from model import UNet
 import schedulefree
 
@@ -26,13 +26,16 @@ def main(tag, rank, world_size):
     else:
         m = basem
 
-    alg = 'flow'
+    alg = 'grad'
     if alg == 'diffusion':
         diff = get_cosine(1000).to(rank)
         sampler = DDIM(diff)
     elif alg == 'flow':
         diff = FlowMatching(1000)
         sampler = FlowSampler(diff)
+    elif alg == 'grad':
+        diff = GradientDescent(1000)
+        sampler = GradientSampler(diff)
     else:
         assert False
 
@@ -61,7 +64,7 @@ def main(tag, rank, world_size):
         t = t.sort().values
         tgt = diff.make_targets(x0, t)
         with torch.autocast('cuda', dtype=torch.bfloat16):
-            pred = m(tgt['xt'], t).float()
+            pred = m(tgt['xt'], t * 0).float()
         loss = F.l1_loss(diff.to_x0(tgt['xt'], pred, t), x0)
         #loss = F.mse_loss(pred, tgt['v'])
         loss.backward()
@@ -75,7 +78,7 @@ def main(tag, rank, world_size):
         opt.eval()
         g = torch.Generator(device=rank)
         g.manual_seed(327023487 + rank)
-        xt = sampler.sample(basem, (24, 3, 96, 96), 51, eta=0,
+        xt = sampler.sample(basem, (36, 3, 96, 96), 51, eta=0,
                          generator=g).float()
         opt.train()
         return {'gen': xt.clamp(-1, 1)}
